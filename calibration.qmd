@@ -83,6 +83,7 @@ df.pm25 <- df.pm25 |>
 ```{r}
 #| eval: false
 #| warning: false
+#| code-fold: true
 
 # Packages ----------------------------------------------------------------
 
