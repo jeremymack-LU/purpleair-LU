@@ -1,0 +1,66 @@
+---
+title: "Lehigh Valley Air Quality"
+format: html
+editor: visual
+fontsize: 10pt
+project:
+  type: website
+  output-dir: docs
+---
+
+```{=html}
+<style>
+  pre {
+    background-color: lightyellow;
+    white-space: pre-wrap;
+    line-height: 100%;
+  }
+</style>
+```
+### **Project summary:**
+
+------------------------------------------------------------------------
+
+PM~2.5~ describes fine inhalable particles, with diameters that are generally 2.5 micrometers and smaller. Particles of this size can have both health and environmental effects. The following project focuses on PM~2.5~ data collected throughout the Lehigh Valley.
+
+Two sources of PM~2.5~ data throughout the Lehigh Valley:
+
+1.  Data collected by the Pennsylvania Department of Environmental Protection at their Freemansburg monitoring site. Data can be [accessed here](https://www.ahs.dep.pa.gov/aq_apps/aadata/Reports/MonthlyParamDetail.aspx).
+
+2.  Data collected by a series of PurpleAir sensors located throughout the Lehigh Valley. Data can be [accessed here](https://map.purpleair.com/1/mAQI/a10/p604800/cC0#12.07/40.63839/-75.35973).
+
+```{r}
+#| echo: false
+#| message: false
+library(leaflet)
+library(tidyverse)
+
+sites <- read_csv(
+  'https://www.dropbox.com/s/2wtxwm7owwdj53f/pa_lv_current.csv?raw=1') |> 
+  select(name,latitude,longitude) |> 
+  filter(name != 'Quarter Mile Road')
+
+leaflet() |> 
+    setView(lat = 40.651,
+            lng = -75.364,
+            zoom = 12) %>% 
+    addTiles("https://tile.jawg.io/jawg-terrain/{z}/{x}/{y}{r}.png?access-token=bka2W5SwTAqWUfIAw12i6iTLOqNOi5nY7EPkdAgUlFOXyxuzOJI7TIQRQ3rYBnCa") |>  
+  addCircleMarkers(data=sites,
+                   lng=~longitude,
+                   lat=~latitude,
+                   stroke=TRUE,
+                   weight=1,
+                   color='black',
+                   fillOpacity=0.6,
+                   fillColor='orange') |>
+  addCircleMarkers(lng=-75.341,
+             lat=40.628,
+             stroke=TRUE,
+             weight=1,
+             color='black',
+             fillOpacity=1,
+             fillColor='blue')
+
+```
+
+------------------------------------------------------------------------

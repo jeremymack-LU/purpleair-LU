@@ -1,0 +1,265 @@
+---
+title: "Calibration"
+---
+
+```{=html}
+<style>
+  pre {
+    background-color: lightyellow;
+    white-space: pre-wrap;
+    line-height: 100%;
+  }
+</style>
+```
+
+```{r}
+#| include: false
+#| warning: false
+# Packages ----------------------------------------------------------------
+
+# Install and load required packages
+pacman::p_load(tidyverse, lubridate, patchwork, weathermetrics)
+
+df.pm25  <- read_csv('https://www.dropbox.com/s/h16g3ld5s72458n/pm25_hourly.csv?raw=1') |> 
+  dplyr::select(2:15)
+
+# Regression for PM2.5 greater than 20
+pa1.mod1 <- lm(pm25 ~ PA1_pm + PA1_t + PA1_rh + PA1_dp,
+               data = df.pm25[df.pm25$PA1_pm>20,])
+summary(pa1.mod1)
+
+# Regression for PM2.5 less than or equal to 20
+pa1.mod2 <- lm(pm25 ~ PA1_pm + PA1_t + PA1_rh + PA1_dp,
+               data = df.pm25[df.pm25$PA1_pm<=20,])
+summary(pa1.mod2)
+
+# Set regression coefficients 
+{
+  b0 <- pa1.mod1$coefficients[[1]]
+  b1 <- pa1.mod1$coefficients[[2]] 
+  b2 <- pa1.mod1$coefficients[[3]] 
+  b3 <- pa1.mod1$coefficients[[4]]
+  b4 <- pa1.mod1$coefficients[[5]]
+  
+  y0 <- pa1.mod2$coefficients[[1]]
+  y1 <- pa1.mod2$coefficients[[2]] 
+  y2 <- pa1.mod2$coefficients[[3]] 
+  y3 <- pa1.mod2$coefficients[[4]]
+  y4 <- pa1.mod2$coefficients[[5]]
+}
+
+# Calculate corrected pm2.5 values
+df.pm25 <- df.pm25 |> 
+  mutate(
+    PA1_pmc=case_when(
+      PA1_pm > 20 ~ b0 + (b1*PA1_pm) + (b2*PA1_t) + (b3*PA1_rh) + (b4*PA1_dp),
+      TRUE ~ y0 + (y1*PA1_pm) + (y2*PA1_t) + (y3*PA1_rh) + (y4*PA1_dp)
+    )
+  )
+
+```
+
+### **Script summary:**
+
+------------------------------------------------------------------------
+
+```{r}
+#| eval: false
+#| warning: false
+
+# Script summary ----------------------------------------------------------
+
+# The following script is used to calibrate PurpleAir sensors to an EPA
+# reference station in Freemansburg, PA.
+
+# Created - 11/29/2022 (jsm)
+# Updated - 01/20/2023 (jsm)
+```
+
+### **Data import:**
+
+------------------------------------------------------------------------
+
+```{r}
+#| eval: false
+#| warning: false
+
+# Packages ----------------------------------------------------------------
+
+# Install and load required packages
+pacman::p_load(tidyverse, lubridate, patchwork, weathermetrics)
+
+# Data --------------------------------------------------------------------
+
+# EPA reference station
+# Build query string for EPA AirNow API
+# Note this requires an account and an API key for access
+
+readRenviron('.Renviron')
+airnow.api  <- Sys.getenv('airnow')
+
+query <- {
+  base.url <- 'https://www.airnowapi.org/aq/data/?'
+  date.url <- 'startDate=2022-01-01T05&endDate=2024-01-01T05&'
+  bbox.url <- 'parameters=PM25&BBOX=-75.410830,40.603913,-75.289980,40.699767&'
+  data.url <- 'dataType=B&format=text/csv&verbose=1&monitorType=0&includerawconcentrations=1&'
+  api.key  <- paste0('API_KEY=', airnow.api)
+  query <- paste0(base.url,date.url,bbox.url,data.url,api.key)
+}
+
+# Read in EPA data from API query
+query  <- read_csv(query, col_names=FALSE)
+df.dep <- query %>%
+  select(X3,X7) %>%
+  rename(datetime=1,
+         pm25=2) %>%
+  mutate(datetime=datetime-hours(5),
+         sensor_index='Freemansburg DEP') %>%
+  mutate(pm25=case_when(
+    pm25 < 0 ~ NA_real_,
+    TRUE ~ pm25
+  ))
+
+# PurpleAir data
+# Data are exported from SQL database hosted on gisweb server
+df.pa <- read_csv('data/fb_sensor_export.csv') %>%
+  arrange(sensor_index, time_stamp) %>%
+  # Convert timestamp to datetime
+  mutate(datetime=as_datetime(time_stamp, tz='EST5EDT')) %>%
+  # Remove minutes from time
+  mutate(datetime=as.POSIXct(paste(datetime), format="%Y-%m-%d %H")) %>%
+  # Group by sensor and datetime and calculate hourly averages
+  group_by(sensor_index,datetime) %>%
+  summarize(pm25=round(mean(pm2_5, na.rm=TRUE),1),
+            rh=round(mean(humidity, na.rm=TRUE),1),
+            t=round(mean(temperature, na.rm=TRUE),1)) %>%
+  ungroup() %>%
+  mutate(sensor_index=case_when(
+    sensor_index == 108584 ~ 'Freemansburg PA1',
+    sensor_index == 108706 ~ 'Freemansburg PA2',
+    TRUE ~ 'Freemansburg PA3'
+  )) %>%
+  relocate(sensor_index, .after='pm25')
+
+# Convert from long to wide format
+df.pa.wide <- df.pa |> 
+  pivot_wider(values_from=c(pm25,rh,t), names_from=sensor_index) |> 
+  rename(PA1_pm=2,PA2_pm=3,PA3_pm=4,PA1_rh=5,PA2_rh=6,PA3_rh=7,PA1_t=8,PA2_t=9,PA3_t=10) |> 
+  # Calculate dew point from humidity and temperature
+  mutate(
+    PA1_dp=humidity.to.dewpoint(PA1_rh, PA1_t, temperature.metric = "fahrenheit"),
+    PA2_dp=humidity.to.dewpoint(PA2_rh, PA2_t, temperature.metric = "fahrenheit"),
+    PA3_dp=humidity.to.dewpoint(PA3_rh, PA3_t, temperature.metric = "fahrenheit")
+  )
+
+# Join PurpleAir data with DEP reference data by datetime
+df.pm25 <- df.pa.wide |> 
+  left_join(df.dep,by='datetime') |> 
+  select(-sensor_index)
+
+str(df.pm25)
+```
+
+```{r}
+#| echo: false
+#| warning: false
+str(df.pm25)
+```
+
+### **Calibration:**
+
+------------------------------------------------------------------------
+
+```{r}
+#| eval: false
+#| warning: false
+
+# Regression model for PM2.5 greater than 20
+pa1.mod1 <- lm(pm25 ~ PA1_pm + PA1_t + PA1_rh + PA1_dp,
+               data = df.pm25[df.pm25$PA1_pm>20,])
+summary(pa1.mod1)
+
+# Regression model for PM2.5 less than or equal to 20
+pa1.mod2 <- lm(pm25 ~ PA1_pm + PA1_t + PA1_rh + PA1_dp,
+               data = df.pm25[df.pm25$PA1_pm<=20,])
+summary(pa1.mod2)
+
+# Set regression coefficients 
+{
+  b0 <- pa1.mod1$coefficients[[1]]
+  b1 <- pa1.mod1$coefficients[[2]] 
+  b2 <- pa1.mod1$coefficients[[3]] 
+  b3 <- pa1.mod1$coefficients[[4]]
+  b4 <- pa1.mod1$coefficients[[5]]
+  
+  y0 <- pa1.mod2$coefficients[[1]]
+  y1 <- pa1.mod2$coefficients[[2]] 
+  y2 <- pa1.mod2$coefficients[[3]] 
+  y3 <- pa1.mod2$coefficients[[4]]
+  y4 <- pa1.mod2$coefficients[[5]]
+}
+
+# Calculate corrected pm2.5 values
+df.pm25 <- df.pm25 |> 
+  mutate(
+    PA1_pmc=case_when(
+      PA1_pm > 20 ~ b0 + (b1*PA1_pm) + (b2*PA1_t) + (b3*PA1_rh) + (b4*PA1_dp),
+      TRUE ~ y0 + (y1*PA1_pm) + (y2*PA1_t) + (y3*PA1_rh) + (y4*PA1_dp)
+    )
+  )
+```
+
+### **Regression plots:**
+
+------------------------------------------------------------------------
+
+```{r fig.height = 5, fig.width = 9, fig.align = "center"}
+#| echo: true
+#| warning: false
+
+# Set theme for plots
+theme <- theme(panel.background=element_rect(fill=NA),
+               panel.border=element_rect(fill=NA,size=0),
+               panel.grid.major=element_line(size=0),
+               panel.grid.minor=element_line(size=0),
+               plot.title=element_blank(),
+               axis.text.y=element_text(family="Times",size=7,colour="black"),
+               axis.text.x=element_text(family="Times",size=7,colour="black"),
+               axis.title=element_text(family="Times",size=8,colour="black"),
+               axis.ticks=element_line(size=0.25,colour="black",linetype=1),
+               axis.line=element_line(size=0.25,colour="black",linetype=1),
+               legend.justification="top",
+               legend.background=element_blank(),
+               legend.position='right',
+               legend.direction='vertical',
+               legend.key=element_blank(),
+               legend.title=element_text(family="Times",size=7,colour="black"),
+               legend.text=element_text(family="Times",size=7,colour="black"))
+
+# Plot 1 - regression observed data
+p1 <- df.pm25 |> 
+  ggplot(aes(pm25,PA1_pm,color=PA1_rh)) + 
+  geom_point(show.legend = FALSE) +
+  geom_abline(slope=1, linetype = "dashed", color="Red") +
+  scale_color_viridis_b(name='Relative\nhumidity') +
+  labs(x=expression(paste("DEP PM"["2.5"],
+                          " (",mu, "g", "/", m^3,")", sep="")),
+       y=expression(paste("PM"["2.5"],
+                          " [as-reported] (", mu, "g", "/", m^3,")", sep=""))) +
+  theme
+
+# Plot 2 - regression corrected data
+p2 <- df.pm25 |> 
+  ggplot(aes(pm25,PA1_pmc,color=PA1_rh)) + 
+  geom_point() +
+  geom_abline(slope=1, linetype = "dashed", color="Red") +
+  scale_color_viridis_b(name='Relative\nhumidity') +
+  labs(x=expression(paste("DEP PM"["2.5"],
+                          " (",mu, "g", "/", m^3,")", sep="")),
+       y=expression(paste("PM"["2.5"],
+                          " [corrected] (", mu, "g", "/", m^3,")", sep=""))) +
+  theme
+
+# Patchwork plots together
+p1 + p2
+```
