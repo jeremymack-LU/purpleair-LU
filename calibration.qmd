@@ -58,6 +58,52 @@ df.pm25 <- df.pm25 |>
     )
   )
 
+pacman::p_load(readxl,openxlsx,lubridate,tidyverse,ModelInference,corrplot)
+
+# Subset PA1 sensor at Freemansburg site
+df.glm <- df.pm25 |> 
+  dplyr::select(PA1_pm, PA1_t, PA1_rh, PA1_dp, pm25)
+
+# Convert tibble to data frame 
+df.glm <- as.data.frame(df.glm)
+
+# Set model definition
+glm.mdef <-
+  new("ModelSetDefinition",
+      response = "pm25",
+      model.type = "lm",
+      model.family = "gaussian",
+      base.model = c(""),
+      variables = c("PA1_pm",
+                    "PA1_t",
+                    "PA1_rh",
+                    "PA1_dp"),
+      sq.terms = c(""),
+      interaction.vars = c(""),
+      remove.interactions = c(""),
+      required.together = list(),
+      never.together = list(),
+      random = c(""),
+      max.terms.in.formula = 4,
+      max.interaction.size = 0,
+      max.num.interactions = 0)
+
+# Create model set
+glm.mods <- createModelSet(glm.mdef)
+
+# Run model set with repeat burrows
+glm.mods <- runModelSet(glm.mods, model.data=df.glm)
+
+# Model fit summary
+glm.mods.summ <- summary(glm.mods)
+glm.mods.summ <- glm.mods.summ |> 
+  mutate(across(where(is.numeric), ~round(.x,3)))
+
+# Variable importance summary
+glm.mods.varimp <- estimateVariableImportance(glm.mods)
+glm.mods.varimp <- glm.mods.varimp |> 
+  mutate(across(where(is.numeric), ~round(.x,3)))
+
 ```
 
 ### **Script summary:**
@@ -266,4 +312,69 @@ p2 <- df.pm25 |>
 
 # Patchwork plots together
 p1 + p2
+```
+
+### **Model fit:**
+
+------------------------------------------------------------------------
+
+```{r}
+#| eval: false
+#| warning: false
+#| code-fold: true
+
+# Subset PA1 sensor at Freemansburg site
+df.glm <- df.pm25 |> 
+  dplyr::select(PA1_pm, PA1_t, PA1_rh, PA1_dp, pm25)
+
+# Convert tibble to data frame 
+df.glm <- as.data.frame(df.glm)
+
+# Set model definition
+glm.mdef <-
+  new("ModelSetDefinition",
+      response = "pm25",
+      model.type = "lm",
+      model.family = "gaussian",
+      base.model = c(""),
+      variables = c("PA1_pm",
+                    "PA1_t",
+                    "PA1_rh",
+                    "PA1_dp"),
+      sq.terms = c(""),
+      interaction.vars = c(""),
+      remove.interactions = c(""),
+      required.together = list(),
+      never.together = list(),
+      random = c(""),
+      max.terms.in.formula = 4,
+      max.interaction.size = 0,
+      max.num.interactions = 0)
+
+# Create model set
+glm.mods <- createModelSet(glm.mdef)
+
+# Run model set with repeat burrows
+glm.mods <- runModelSet(glm.mods, model.data=df.glm)
+
+# Model fit summary
+glm.mods.summ <- summary(glm.mods)
+glm.mods.summ <- glm.mods.summ |> 
+  mutate(across(where(is.numeric), ~round(.x,3)))
+
+# Variable importance summary
+glm.mods.varimp <- estimateVariableImportance(glm.mods)
+glm.mods.varimp <- glm.mods.varimp |> 
+  mutate(across(where(is.numeric), ~round(.x,3)))
+
+glm.mods.summ[,c(2,4,6:7)]
+```
+
+
+```{r}
+#| echo: false
+#| warning: false
+
+glm.mods.summ[,c(2,4,6:7)]
+
 ```

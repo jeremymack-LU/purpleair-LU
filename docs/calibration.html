@@ -198,6 +198,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
   <li><a href="#data-import" id="toc-data-import" class="nav-link" data-scroll-target="#data-import"><strong>Data import:</strong></a></li>
   <li><a href="#calibration" id="toc-calibration" class="nav-link" data-scroll-target="#calibration"><strong>Calibration:</strong></a></li>
   <li><a href="#regression-plots" id="toc-regression-plots" class="nav-link" data-scroll-target="#regression-plots"><strong>Regression plots:</strong></a></li>
+  <li><a href="#model-fit" id="toc-model-fit" class="nav-link" data-scroll-target="#model-fit"><strong>Model fit:</strong></a></li>
   </ul>
 </nav>
     </div>
@@ -443,6 +444,81 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <p><img src="calibration_files/figure-html/unnamed-chunk-12-1.png" class="img-fluid figure-img" width="864"></p>
 </figure>
 </div>
+</div>
+</div>
+</section>
+<section id="model-fit" class="level3">
+<h3 class="anchored" data-anchor-id="model-fit"><strong>Model fit:</strong></h3>
+<hr>
+<div class="cell">
+<details>
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Subset PA1 sensor at Freemansburg site</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>df.glm <span class="ot">&lt;-</span> df.pm25 <span class="sc">|&gt;</span> </span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(PA1_pm, PA1_t, PA1_rh, PA1_dp, pm25)</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Convert tibble to data frame </span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>df.glm <span class="ot">&lt;-</span> <span class="fu">as.data.frame</span>(df.glm)</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Set model definition</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>glm.mdef <span class="ot">&lt;-</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">new</span>(<span class="st">"ModelSetDefinition"</span>,</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>      <span class="at">response =</span> <span class="st">"pm25"</span>,</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>      <span class="at">model.type =</span> <span class="st">"lm"</span>,</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>      <span class="at">model.family =</span> <span class="st">"gaussian"</span>,</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>      <span class="at">base.model =</span> <span class="fu">c</span>(<span class="st">""</span>),</span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>      <span class="at">variables =</span> <span class="fu">c</span>(<span class="st">"PA1_pm"</span>,</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>                    <span class="st">"PA1_t"</span>,</span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>                    <span class="st">"PA1_rh"</span>,</span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>                    <span class="st">"PA1_dp"</span>),</span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>      <span class="at">sq.terms =</span> <span class="fu">c</span>(<span class="st">""</span>),</span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>      <span class="at">interaction.vars =</span> <span class="fu">c</span>(<span class="st">""</span>),</span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>      <span class="at">remove.interactions =</span> <span class="fu">c</span>(<span class="st">""</span>),</span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>      <span class="at">required.together =</span> <span class="fu">list</span>(),</span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>      <span class="at">never.together =</span> <span class="fu">list</span>(),</span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>      <span class="at">random =</span> <span class="fu">c</span>(<span class="st">""</span>),</span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>      <span class="at">max.terms.in.formula =</span> <span class="dv">4</span>,</span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>      <span class="at">max.interaction.size =</span> <span class="dv">0</span>,</span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>      <span class="at">max.num.interactions =</span> <span class="dv">0</span>)</span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a><span class="co"># Create model set</span></span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>glm.mods <span class="ot">&lt;-</span> <span class="fu">createModelSet</span>(glm.mdef)</span>
+<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a><span class="co"># Run model set with repeat burrows</span></span>
+<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a>glm.mods <span class="ot">&lt;-</span> <span class="fu">runModelSet</span>(glm.mods, <span class="at">model.data=</span>df.glm)</span>
+<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a><span class="co"># Model fit summary</span></span>
+<span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a>glm.mods.summ <span class="ot">&lt;-</span> <span class="fu">summary</span>(glm.mods)</span>
+<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a>glm.mods.summ <span class="ot">&lt;-</span> glm.mods.summ <span class="sc">|&gt;</span> </span>
+<span id="cb6-38"><a href="#cb6-38" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="fu">across</span>(<span class="fu">where</span>(is.numeric), <span class="sc">~</span><span class="fu">round</span>(.x,<span class="dv">3</span>)))</span>
+<span id="cb6-39"><a href="#cb6-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-40"><a href="#cb6-40" aria-hidden="true" tabindex="-1"></a><span class="co"># Variable importance summary</span></span>
+<span id="cb6-41"><a href="#cb6-41" aria-hidden="true" tabindex="-1"></a>glm.mods.varimp <span class="ot">&lt;-</span> <span class="fu">estimateVariableImportance</span>(glm.mods)</span>
+<span id="cb6-42"><a href="#cb6-42" aria-hidden="true" tabindex="-1"></a>glm.mods.varimp <span class="ot">&lt;-</span> glm.mods.varimp <span class="sc">|&gt;</span> </span>
+<span id="cb6-43"><a href="#cb6-43" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="fu">across</span>(<span class="fu">where</span>(is.numeric), <span class="sc">~</span><span class="fu">round</span>(.x,<span class="dv">3</span>)))</span>
+<span id="cb6-44"><a href="#cb6-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-45"><a href="#cb6-45" aria-hidden="true" tabindex="-1"></a>glm.mods.summ[,<span class="fu">c</span>(<span class="dv">2</span>,<span class="dv">4</span>,<span class="dv">6</span><span class="sc">:</span><span class="dv">7</span>)]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+<div class="cell">
+<div class="cell-output cell-output-stdout">
+<pre><code>                              model.name k     aicc delta.aicc
+3           pm25~PA1_pm + PA1_t + PA1_rh 5 16134.04      0.000
+5          pm25~PA1_pm + PA1_rh + PA1_dp 5 16135.03      0.988
+7  pm25~PA1_pm + PA1_t + PA1_rh + PA1_dp 6 16135.91      1.873
+4           pm25~PA1_pm + PA1_t + PA1_dp 5 16146.35     12.313
+13                  pm25~PA1_pm + PA1_rh 4 16198.97     64.934
+14                  pm25~PA1_pm + PA1_dp 4 16728.02    593.979
+12                   pm25~PA1_pm + PA1_t 4 16735.22    601.182
+1                            pm25~PA1_pm 3 16762.87    628.826
+2                   pm25~PA1_rh + PA1_dp 4 18931.77   2797.735
+6           pm25~PA1_t + PA1_rh + PA1_dp 5 18921.33   2787.291
+8                                 pm25~1 2 18947.96   2813.917
+9                             pm25~PA1_t 3 18936.26   2802.218
+10                           pm25~PA1_rh 3 18945.55   2811.509
+11                           pm25~PA1_dp 3 18929.81   2795.771
+15                   pm25~PA1_t + PA1_rh 4 18934.10   2800.065
+16                   pm25~PA1_t + PA1_dp 4 18931.67   2797.629</code></pre>
 </div>
 </div>
 
