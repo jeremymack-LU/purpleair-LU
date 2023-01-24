@@ -175,6 +175,7 @@ str(df.pm25)
 ```{r}
 #| eval: false
 #| warning: false
+#| code-fold: true
 
 # Regression model for PM2.5 greater than 20
 pa1.mod1 <- lm(pm25 ~ PA1_pm + PA1_t + PA1_rh + PA1_dp,
@@ -218,6 +219,7 @@ df.pm25 <- df.pm25 |>
 ```{r fig.height = 5, fig.width = 9, fig.align = "center"}
 #| echo: true
 #| warning: false
+#| code-fold: true
 
 # Set theme for plots
 theme <- theme(panel.background=element_rect(fill=NA),
