@@ -1,0 +1,163 @@
+---
+title: "API data access"
+---
+
+```{=html}
+<style>
+  pre {
+    background-color: lightyellow;
+    white-space: pre-wrap;
+    line-height: 100%;
+  }
+</style>
+```
+
+### **Script summary:**
+
+------------------------------------------------------------------------
+
+```{r}
+#| eval: false
+#| warning: false
+
+# Script summary ----------------------------------------------------------
+
+# The following script uses two APIs to download air quality and meteorological 
+# data. Air quality is accessed with the PurpleAir API to download real-time 
+# PM2.5 data for sensors located throughout the Lehigh Valley. An API key is 
+# required. Meteorological data is accessed with NOAA's climate API, using
+# the R package 'rnoaa'.
+
+# Created - 11/29/2022 (jsm)
+# Updated - 01/31/2023 (jsm)
+```
+
+![](images/rest_api.png){width=80%}
+
+### **PurpleAir API:**
+
+------------------------------------------------------------------------
+
+```{r}
+#| eval: false
+#| warning: false
+#| code-fold: true
+
+# Install and load required packages --------------------------------------
+pacman::p_load(jsonlite,tidyverse,lubridate)
+
+# AQI function ------------------------------------------------------------
+# Function to convert pm2.5 to AQI
+aqi <- function(conc){
+  concL <- case_when(
+    between(conc,0,12) ~ 0,
+    between(conc,12.1,35.4) ~ 12.1,
+    between(conc,35.5,55.4) ~ 35.5,
+    between(conc,55.5,150.4) ~ 55.5,
+    between(conc,150.5,250.4) ~ 150.5,
+    TRUE ~ 250.5)
+  
+  concH <- case_when(
+    between(conc,0,12) ~ 12,
+    between(conc,12.1,35.4) ~ 35.4,
+    between(conc,35.5,55.4) ~ 55.4,
+    between(conc,55.5,150.4) ~ 150.4,
+    between(conc,150.5,250.4) ~ 250.4,
+    TRUE ~ 500.4)
+  
+  aqiL <- case_when(
+    between(conc,0,12) ~ 0,
+    between(conc,12.1,35.4) ~ 51,
+    between(conc,35.5,55.4) ~ 101,
+    between(conc,55.5,150.4) ~ 151,
+    between(conc,150.5,250.4) ~ 201,
+    TRUE ~ 301)
+  
+  aqiH <- case_when(
+    between(conc,0,12) ~ 50,
+    between(conc,12.1,35.4) ~ 100,
+    between(conc,35.5,55.4) ~ 150,
+    between(conc,55.5,150.4) ~ 200,
+    between(conc,150.5,250.4) ~ 300,
+    TRUE ~ 500)
+  
+  aqi <- (((aqiH-aqiL)/(concH-concL)) * (conc-concL)) + aqiL
+  
+  return(aqi)
+}
+
+# PurpleAir data API call -------------------------------------------------
+# Set base url for PurpleAir API
+# Currently using the group option to download data for all sensors in the
+# Lehigh Valley area. Another option is to search geographically.
+# Set bounding box to search for sensors around Bethlehem
+#location <- '&nwlng=-75.500&nwlat=40.688&selng=-75.280&selat=40.531&location_type=0'
+base.url <- 'https://api.purpleair.com/v1/groups/1294/members?api_key='
+
+# Grab API key from R environment file
+readRenviron('C:/R/projects/purpleair/.Renviron')
+api.key  <- Sys.getenv('purpleair_token')
+
+# Set variables to query
+# Full list of variables found here: https://api.purpleair.com/#api-sensors-get-sensors-data
+fields   <- c('name',
+              'latitude',
+              'longitude',
+              'date_created',
+              'last_seen',
+              'humidity',
+              'temperature',
+              'pressure',
+              'pm2.5',
+              'pm2.5_10minute',
+              'pm2.5_60minute',
+              'pm2.5_1week')
+
+# Create url query string for API call
+url <- paste0(
+  base.url, api.key, '&', 'fields=', paste(fields, collapse = '%2C'), '&location_type=0')
+
+# Read .json file returned by API call
+pa.json <- fromJSON(url)
+
+pa.df <- data.frame(pa.json$data)
+names <- tibble(label=pa.json$fields)
+
+pa.df <- pa.df |> 
+  rename_all(~names |> pull(label)) |>
+  mutate_at(c(1:3,5:13), as.numeric) |>
+  mutate(aqi=round(aqi(pm2.5),0),
+         aqi_10=round(aqi(pm2.5_10minute),0),
+         aqi_60=round(aqi(pm2.5_60minute),0),
+         aqi_1wk=round(aqi(pm2.5_1week),0)) |>
+  rename(snsr_nd=1,
+         dt_crtd=2,
+         last_sn=3,
+         name=4,
+         pm25=10,
+         pm25_10=11,
+         pm25_60=12,
+         pm25_1wk=13)
+```
+
+### **NOAA API:**
+
+------------------------------------------------------------------------
+
+```{r}
+#| eval: false
+#| warning: false
+#| code-fold: true
+
+# Install and load required packages --------------------------------------
+pacman::p_load(rnoaa)
+
+# Download daily NOAA data for Lehigh Valley airport
+noaa <- meteo_tidy_ghcnd(
+    stationid='USW00014737',
+    var=c('prcp','tavg','tmax','tmin','snow','snwd')
+)
+
+noaa <- noaa |>  drop_na(tmax)
+
+```
